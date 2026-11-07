@@ -109,14 +109,15 @@ label.field > span { display: block; font-size: .8rem; color: var(--muted); text
 .chips { display: flex; flex-wrap: wrap; gap: .35rem; }
 .chip {
   border: 1px solid var(--line); background: var(--panel-2); color: var(--muted);
-  border-radius: 999px; padding: .2rem .65rem; font-size: .82rem; cursor: pointer; user-select: none;
+  border-radius: 999px; padding: .2rem .65rem; font: inherit; font-size: .82rem; cursor: pointer; user-select: none;
 }
 .chip.on { background: #3a0d11; border-color: var(--blood); color: #fff; }
 .chip.static { cursor: default; }
 
 /* Losanges de perks */
 .perk-slots { display: flex; gap: 1.2rem; flex-wrap: wrap; padding: .5rem 0 1rem; }
-.perk-slot { width: 112px; text-align: center; cursor: pointer; background: none; border: 0; color: inherit; padding: 0; font: inherit; }
+.perk-slot { width: 112px; text-align: center; }
+.perk-slot-main { display: block; width: 100%; cursor: pointer; background: none; border: 0; color: inherit; padding: 0; font: inherit; }
 .diamond {
   width: 64px; height: 64px; margin: 14px auto 18px; transform: rotate(45deg);
   border: 2px solid #5a4a50; background: linear-gradient(135deg, #2b2025, #120f13);
@@ -127,7 +128,7 @@ label.field > span { display: block; font-size: .8rem; color: var(--muted); text
   display: grid; place-items: center; width: 100%; height: 100%;
 }
 .diamond svg { width: 62%; height: 62%; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--c, #fff) 45%, transparent)); }
-.perk-slot:hover .diamond, .perk-slot:focus-visible .diamond { border-color: var(--blood-bright); box-shadow: 0 0 14px rgba(227,36,43,.45); }
+.perk-slot-main:hover .diamond, .perk-slot-main:focus-visible .diamond { border-color: var(--blood-bright); box-shadow: 0 0 14px rgba(227,36,43,.45); }
 .diamond[style] {
   border-color: color-mix(in srgb, var(--c) 70%, #000);
   background: linear-gradient(135deg, color-mix(in srgb, var(--c) 22%, #1a1216), #0e0b0e);
@@ -136,8 +137,8 @@ label.field > span { display: block; font-size: .8rem; color: var(--muted); text
 .perk-slot .name { font-size: .85rem; line-height: 1.2; min-height: 2.4em; }
 .perk-slot .name.empty-name { color: var(--muted); font-style: italic; }
 .slot-tools { display: flex; justify-content: center; gap: .5rem; flex-wrap: wrap; margin-top: .15rem; font-size: .75rem; }
-.slot-tools span { color: var(--muted); }
-.slot-tools span:hover { color: var(--text); text-decoration: underline; }
+.slot-tools button { background: none; border: 0; padding: .15rem .25rem; font: inherit; color: var(--muted); cursor: pointer; }
+.slot-tools button:hover { color: var(--text); text-decoration: underline; }
 .slot-tools .lock.on { color: var(--ember); }
 .perk-slot.locked .diamond { outline: 2px dashed var(--ember); outline-offset: 5px; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
@@ -215,6 +216,8 @@ dialog::backdrop { background: rgba(0,0,0,.75); }
 .picker-head { display: flex; gap: .5rem; }
 .picker-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 200px; border: 1px solid var(--line); border-radius: var(--radius); }
 .picker-list li { display: flex; align-items: center; gap: .5rem; padding: .45rem .7rem; border-bottom: 1px solid var(--line); cursor: pointer; }
+.picker-list .p-pick { flex: 1; display: flex; align-items: center; gap: .5rem; min-width: 0; background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: inherit; }
+.picker-list .p-pick:disabled { cursor: not-allowed; }
 .picker-list li:hover, .picker-list li.kbd { background: #2a1216; }
 .picker-list li.taken { opacity: .4; cursor: not-allowed; }
 .picker-list .p-name { flex: 1; }
@@ -279,3 +282,17 @@ dialog::backdrop { background: rgba(0,0,0,.75); }
 
 .count { margin-left: .75rem; font-size: .85rem; color: var(--muted); }
 .linklike { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; cursor: pointer; }
+
+/* Focus visible au clavier sur tous les contrôles */
+button:focus-visible, a:focus-visible, summary:focus-visible, .linklike:focus-visible {
+  outline: 2px solid var(--blood-bright); outline-offset: 2px;
+}
+
+/* Écrans tactiles : cibles plus grandes */
+@media (pointer: coarse) {
+  .btn.small, .chip, .slot-tools button, .picker-list .edit { min-height: 40px; }
+  .slot-tools button { padding: .4rem .6rem; }
+  .stars-input button { min-width: 40px; min-height: 40px; }
+  .picker-list .edit { min-width: 40px; }
+  .fav { min-width: 40px; min-height: 40px; }
+}

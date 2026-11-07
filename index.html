@@ -20,9 +20,10 @@
       <a href="#/teams" data-nav="teams">Équipes</a>
     </nav>
     <div class="menu">
-      <button class="btn ghost" id="exportBtn" title="Télécharger une sauvegarde JSON">Exporter</button>
-      <button class="btn ghost" id="csvBtn" title="Tableau pour Google Sheets / Excel">CSV</button>
-      <label class="btn ghost" title="Fusionner une sauvegarde JSON (les éléments de même identifiant sont remplacés après confirmation)">Importer<input type="file" id="importInput" accept="application/json" hidden></label>
+      <button class="btn ghost" id="exportBtn" title="Télécharger une sauvegarde JSON de tous tes builds et équipes">Exporter tout</button>
+      <button class="btn ghost" id="csvBtn" title="Tableau pour Google Sheets / Excel">Exporter CSV</button>
+      <button class="btn ghost" id="importBtn" title="Fusionner une sauvegarde JSON (les éléments de même identifiant sont remplacés après confirmation)">Importer</button>
+      <input type="file" id="importInput" accept="application/json" hidden aria-label="Fichier de sauvegarde à importer">
     </div>
   </header>
 
@@ -30,7 +31,7 @@
 
   <dialog id="picker">
     <form method="dialog" class="picker-head">
-      <input type="search" id="pickerSearch" placeholder="Chercher un perk (français ou anglais)…" autocomplete="off">
+      <input type="search" id="pickerSearch" aria-label="Chercher un perk" placeholder="Chercher un perk (français ou anglais)…" autocomplete="off">
       <button class="btn ghost" value="cancel">Fermer</button>
     </form>
     <div class="chips" id="pickerCats"></div>
@@ -38,7 +39,7 @@
     <details class="custom-perk">
       <summary>Ajouter un perk qui manque</summary>
       <div class="row">
-        <input id="customName" placeholder="Nom du perk">
+        <input id="customName" aria-label="Nom du perk à ajouter" placeholder="Nom du perk">
         <button class="btn" id="customAdd" type="button">Ajouter</button>
       </div>
     </details>

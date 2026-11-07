@@ -75,7 +75,7 @@ function toast(msg) {
   t.textContent = msg;
   t.classList.add("show");
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => t.classList.remove("show"), 2200);
+  toast.timer = setTimeout(() => t.classList.remove("show"), Math.min(8000, Math.max(2200, msg.length * 55)));
 }
 
 function fmtDate(ts) {
@@ -203,8 +203,9 @@ function openPicker({ role, taken, onPick, onRename = null }) {
 
 function renderPickerCats() {
   const cats = catsLabel(picker.role);
-  $("#pickerCats").innerHTML = [`<span class="chip ${picker.cat ? "" : "on"}" data-cat="">Toutes</span>`]
-    .concat(Object.entries(cats).map(([k, v]) => `<span class="chip ${picker.cat === k ? "on" : ""}" data-cat="${k}">${esc(v)}</span>`))
+  const chip = (k, label) => `<button type="button" class="chip ${(picker.cat || "") === k ? "on" : ""}" data-cat="${k}" aria-pressed="${(picker.cat || "") === k}">${esc(label)}</button>`;
+  $("#pickerCats").innerHTML = [chip("", "Toutes")]
+    .concat(Object.entries(cats).map(([k, v]) => chip(k, v)))
     .join("");
 }
 
@@ -223,11 +224,13 @@ function renderPickerList() {
   $("#pickerList").innerHTML = items.length
     ? items.map((p) => `
       <li data-key="${esc(p.key)}" class="${picker.taken.has(p.key) ? "taken" : ""}">
+        <button type="button" class="p-pick" ${picker.taken.has(p.key) ? 'disabled title="Déjà dans ce build"' : ""}>
         <span class="p-icon" style="color:${perkVisual(p).color}" data-tip="${esc(p.key)}">${perkIconHtml(p.key)}</span>
         <div class="p-name">${esc(perkName(p.key))}${p.custom ? " <span class='p-cats'>perso</span>" : ""}${p.unverified && !state.renames[p.key] ? ` <span class="p-unverified" title="Nom français absent du site officiel : à vérifier dans le jeu (✎ pour corriger)">non vérifié</span>` : ""}
           <div class="p-en">${esc(p.en)}${p.cats.length ? ` · <span class="p-cats">${p.cats.map((c) => esc(cats[c] || c)).join(", ")}</span>` : ""}</div>
         </div>
-        <button class="edit" type="button" data-rename="${esc(p.key)}" title="Corriger le nom français">✎</button>
+        </button>
+        <button class="edit" type="button" data-rename="${esc(p.key)}" title="Corriger le nom français" aria-label="Corriger le nom de ${esc(perkName(p.key))}">✎</button>
       </li>`).join("")
     : `<li class="muted">Aucun perk trouvé. Tu peux l'ajouter ci-dessous.</li>`;
   if (!items.length) {
@@ -405,6 +408,14 @@ document.addEventListener("mouseover", (e) => {
   else if (!t && tip.target && !e.target.closest("#perkTip")) hideTip();
 });
 document.addEventListener("scroll", hideTip, true);
+// Clavier : l'infobulle suit le focus ; Échap la ferme.
+document.addEventListener("focusin", (e) => {
+  if (!e.target.matches?.(":focus-visible")) return;
+  const t = e.target.closest("[data-tip]") || e.target.querySelector("[data-tip]");
+  if (t) showTip(t);
+});
+document.addEventListener("focusout", hideTip);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideTip(); });
 
 // Écran tactile : appui long
 document.addEventListener("touchstart", (e) => {
@@ -436,14 +447,16 @@ function slotsHtml(perks, dupes = new Set(), locks = null) {
   return perks.map((k, i) => {
     const name = perkName(k);
     const lockBtn = locks && k
-      ? `<span class="lock ${locks[i] ? "on" : ""}" data-lock="${i}" title="${locks[i] ? "Gardé lors d'une nouvelle génération" : "Garder ce perk lors d'une nouvelle génération"}">${locks[i] ? "🔒 gardé" : "🔓 garder"}</span>`
+      ? `<button type="button" class="lock ${locks[i] ? "on" : ""}" data-lock="${i}" aria-pressed="${!!locks[i]}" title="${locks[i] ? "Gardé lors d'une nouvelle génération" : "Garder ce perk lors d'une nouvelle génération"}">${locks[i] ? "🔒 gardé" : "🔓 garder"}</button>`
       : "";
     return `
-      <button type="button" class="perk-slot ${k ? "filled" : ""} ${k && dupes.has(k) ? "dupe" : ""} ${locks && locks[i] && k ? "locked" : ""}" data-slot="${i}">
-        ${diamondHtml(k)}
-        <div class="name ${k ? "" : "empty-name"}">${k ? esc(name) : "Choisir un perk"}</div>
-        ${k ? `<div class="slot-tools">${lockBtn}<span class="remove" data-clear="${i}">retirer</span></div>` : ""}
-      </button>`;
+      <div class="perk-slot ${k ? "filled" : ""} ${k && dupes.has(k) ? "dupe" : ""} ${locks && locks[i] && k ? "locked" : ""}">
+        <button type="button" class="perk-slot-main" data-slot="${i}" aria-label="${k ? `Perk ${i + 1} : ${esc(name)}, changer` : `Perk ${i + 1} : choisir un perk`}">
+          ${diamondHtml(k)}
+          <div class="name ${k ? "" : "empty-name"}">${k ? esc(name) : "Choisir un perk"}</div>
+        </button>
+        ${k ? `<div class="slot-tools">${lockBtn}<button type="button" class="remove" data-clear="${i}" aria-label="Retirer ${esc(name)}">retirer</button></div>` : ""}
+      </div>`;
   }).join("");
 }
 
@@ -481,22 +494,22 @@ function renderBuilds() {
       <a class="btn" href="#/new">+ Nouveau build</a>
     </div>
     <div class="filters">
-      <input type="search" id="fQ" placeholder="Chercher (nom, perk, note…)" value="${esc(ui.q)}">
-      <select id="fRole">
+      <input type="search" id="fQ" aria-label="Rechercher un build" placeholder="Chercher (nom, perk, note…)" value="${esc(ui.q)}">
+      <select id="fRole" aria-label="Filtrer par rôle">
         <option value="all">Tous les rôles</option>
         <option value="survivor" ${ui.role === "survivor" ? "selected" : ""}>Survivant</option>
         <option value="killer" ${ui.role === "killer" ? "selected" : ""}>Tueur</option>
       </select>
-      ${ui.role === "survivor" ? "" : `<select id="fKiller"><option value="">Tous les tueurs</option>${killers.map((k) => `<option ${norm(ui.killer) === norm(k) ? "selected" : ""}>${esc(k)}</option>`).join("")}</select>`}
-      <select id="fTag"><option value="">Tous les tags</option>${tags.map((t) => `<option ${norm(ui.tag) === norm(t) ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>
-      <select id="fSort">
+      ${ui.role === "survivor" ? "" : `<select id="fKiller" aria-label="Filtrer par tueur"><option value="">Tous les tueurs</option>${killers.map((k) => `<option ${norm(ui.killer) === norm(k) ? "selected" : ""}>${esc(k)}</option>`).join("")}</select>`}
+      <select id="fTag" aria-label="Filtrer par tag"><option value="">Tous les tags</option>${tags.map((t) => `<option ${norm(ui.tag) === norm(t) ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>
+      <select id="fSort" aria-label="Trier les builds">
         <option value="updated" ${ui.sort === "updated" ? "selected" : ""}>Modifiés récemment</option>
         <option value="fav" ${ui.sort === "fav" ? "selected" : ""}>Favoris d'abord</option>
         <option value="rating" ${ui.sort === "rating" ? "selected" : ""}>Mieux notés</option>
         <option value="name" ${ui.sort === "name" ? "selected" : ""}>Nom (A→Z)</option>
       </select>
     </div>
-    <span class="chip ${ui.favOnly ? "on" : ""}" id="fFav">★ Favoris seulement</span>
+    <button type="button" class="chip ${ui.favOnly ? "on" : ""}" id="fFav" aria-pressed="${!!ui.favOnly}">★ Favoris seulement</button>
     <span class="count" id="count"></span>
     <div id="cards"></div>`;
 
@@ -507,7 +520,7 @@ function renderBuilds() {
   if ($("#fKiller")) bind("#fKiller", "killer");
   bind("#fTag", "tag");
   bind("#fSort", "sort");
-  $("#fFav").addEventListener("click", (e) => { ui.favOnly = !ui.favOnly; e.target.classList.toggle("on", ui.favOnly); saveUi(); renderCards(); });
+  $("#fFav").addEventListener("click", (e) => { ui.favOnly = !ui.favOnly; e.currentTarget.classList.toggle("on", ui.favOnly); e.currentTarget.setAttribute("aria-pressed", ui.favOnly); saveUi(); renderCards(); });
   $("#count").addEventListener("click", (e) => {
     if (e.target.id !== "resetFilters") return;
     Object.assign(ui, { q: "", role: "all", killer: "", tag: "", favOnly: false });
@@ -551,11 +564,11 @@ function renderCards() {
       <div class="card-head">
         <div>
           <div class="card-title">${esc(b.name)}</div>
-          <div class="card-meta">${b.role === "killer" ? esc(b.killer || "Tueur") : esc(b.item && b.item !== "Aucun" ? b.item : "Survivant")} ${stars(b.rating)}</div>
+          <div class="card-meta">${b.role === "killer" ? esc(b.killer || "") : esc(b.item && b.item !== "Aucun" ? b.item : "")} ${stars(b.rating)}</div>
         </div>
         <div class="row">
           <span class="badge ${b.role}">${b.role === "killer" ? "Tueur" : "Survivant"}</span>
-          <button class="fav ${b.fav ? "on" : ""}" data-act="fav" title="Favori">★</button>
+          <button class="fav ${b.fav ? "on" : ""}" data-act="fav" title="Favori" aria-label="Favori" aria-pressed="${!!b.fav}">★</button>
         </div>
       </div>
       ${miniPerks(b.perks)}
@@ -564,7 +577,7 @@ function renderCards() {
       <div class="card-actions">
         <a class="btn small" href="#/edit/${b.id}">Modifier</a>
         <button class="btn small ghost" data-act="dup">Dupliquer</button>
-        <button class="btn small ghost" data-act="copy">Copier</button>
+        <button class="btn small ghost" data-act="copy" title="Copier le build sous forme de texte">Copier en texte</button>
         <button class="btn small ghost" data-act="export" title="Télécharger ce build en JSON">Exporter ce build</button>
         <button class="btn small danger" data-act="del">Supprimer</button>
       </div>
@@ -580,8 +593,12 @@ function renderCards() {
     if (act === "fav") { b.fav = !b.fav; save(); renderCards(); }
     if (act === "dup") {
       const c = clone(b);
-      Object.assign(c, { id: uid(), name: b.name + " (copie)", created: Date.now(), updated: Date.now(), fav: false });
-      state.builds.push(c); save(); location.hash = "#/edit/" + c.id;
+      const base = b.name.replace(/ \(copie(?: \d+)?\)$/, "");
+      const used = new Set(state.builds.map((x) => x.name));
+      let name = `${base} (copie)`;
+      for (let n = 2; used.has(name); n++) name = `${base} (copie ${n})`;
+      Object.assign(c, { id: uid(), name, created: Date.now(), updated: Date.now(), fav: false });
+      state.builds.push(c); save(); toast(`Copie « ${name} » créée : tu modifies la copie`); location.hash = "#/edit/" + c.id;
     }
     if (act === "copy") copyBuild(b);
     if (act === "export") exportBuild(b);
@@ -628,7 +645,7 @@ function renderEditor(id) {
 
   $("#app").innerHTML = `
     <div class="toolbar"><h1>${existing ? "Modifier le build" : "Nouveau build"}</h1>
-      <div class="role-toggle" id="role">
+      <div class="role-toggle" id="role" role="group" aria-label="Rôle du build">
         <button type="button" data-role="survivor">Survivant</button>
         <button type="button" data-role="killer">Tueur</button>
       </div>
@@ -644,7 +661,7 @@ function renderEditor(id) {
           <div class="row" style="justify-content:space-between;flex-wrap:wrap;margin-top:1.5rem">
             <h2 style="margin:0">Perks</h2>
             <div class="row">
-              <button type="button" class="btn ghost small" id="rerollBtn" hidden title="Relancer avec les mêmes types">↻ Relancer</button>
+              <button type="button" class="btn ghost small" id="rerollBtn" hidden title="Relancer avec les mêmes catégories">↻ Relancer</button>
               <button type="button" class="btn small" id="genBtn">🎲 Générer</button>
             </div>
           </div>
@@ -667,18 +684,18 @@ function renderEditor(id) {
 
         <div class="panel" style="margin-top:1rem">
           <h2 style="margin-top:0">Notes</h2>
-          <label class="field"><span>Style de jeu</span><div class="chips" id="ePlay"></div></label>
+          <div class="field" role="group" aria-label="Style de jeu"><span>Style de jeu</span><div class="chips" id="ePlay"></div></div>
           <label class="field"><span>Tags (séparés par des virgules)</span><input id="eTags" value="${esc(d.tags.join(", "))}" placeholder="ex. solo, soirée, à tester"></label>
           <label class="field"><span>Comment le jouer, points forts, contres</span><textarea id="eNotes">${esc(d.notes)}</textarea></label>
           <div class="row" style="justify-content:space-between;flex-wrap:wrap">
-            <div class="stars-input" id="eRating" title="Ton ressenti"></div>
-            <span class="chip" id="eFav">★ Favori</span>
+            <div class="stars-input" id="eRating" title="Ton ressenti" role="group" aria-label="Note"></div>
+            <button type="button" class="chip" id="eFav" aria-pressed="false">★ Favori</button>
           </div>
         </div>
 
         <div class="actions-bar">
           <button class="btn" id="saveBtn">Enregistrer</button>
-          <a class="btn ghost" href="#/builds">Annuler</a>
+          <a class="btn ghost" href="#/builds" id="eCancel">Annuler</a>
           ${existing ? `<button class="btn ghost" id="copyBtn">Copier en texte</button><button class="btn danger" id="delBtn">Supprimer</button>` : ""}
         </div>
       </div>
@@ -693,7 +710,7 @@ function renderEditor(id) {
 
     <dialog id="genDialog" class="gen-dialog">
       <h2 style="margin-top:0">Générer un build</h2>
-      <p class="muted">Coche un ou plusieurs types : les perks sont répartis entre eux. Les perks gardés (🔒) ne changent pas.</p>
+      <p class="muted">Coche une ou plusieurs catégories : les perks sont répartis entre elles. Les perks gardés (🔒) ne changent pas.</p>
       <div class="chips" id="genCats"></div>
       <div class="actions-bar">
         <button type="button" class="btn" id="genGo">🎲 Générer</button>
@@ -707,7 +724,7 @@ function renderEditor(id) {
   let generated = false;
 
   const refresh = () => {
-    document.querySelectorAll("#role button").forEach((b) => b.classList.toggle("on", b.dataset.role === d.role));
+    document.querySelectorAll("#role button").forEach((b) => { b.classList.toggle("on", b.dataset.role === d.role); b.setAttribute("aria-pressed", b.dataset.role === d.role); });
     $("#killerField").hidden = d.role !== "killer";
     $("#itemField").hidden = d.role !== "survivor";
     $("#powerField").hidden = d.role !== "killer";
@@ -722,9 +739,10 @@ function renderEditor(id) {
             <li><div class="reco-text"><strong>${esc(perkName(k))}</strong><div class="reco-why">${r.reasons.map(esc).join("<br>")}</div></div>
             <button class="btn small" data-reco="${esc(k)}" ${d.perks.every(Boolean) ? "disabled title='Les 4 emplacements sont pris'" : ""}>Ajouter</button></li>`).join("")}</ul>`
         : `<p class="muted">Pas de synergie connue pour ces perks. Plus tu enregistres de builds, plus les suggestions s'enrichissent.</p>`;
-    $("#ePlay").innerHTML = PLAYSTYLES.map((p) => `<span class="chip ${d.playstyles.includes(p) ? "on" : ""}" data-play="${esc(p)}">${esc(p)}</span>`).join("");
-    $("#eRating").innerHTML = [1, 2, 3, 4, 5].map((n) => `<button type="button" data-rate="${n}" class="${n <= d.rating ? "on" : ""}">★</button>`).join("");
+    $("#ePlay").innerHTML = PLAYSTYLES.map((p) => `<button type="button" class="chip ${d.playstyles.includes(p) ? "on" : ""}" data-play="${esc(p)}" aria-pressed="${d.playstyles.includes(p)}">${esc(p)}</button>`).join("");
+    $("#eRating").innerHTML = [1, 2, 3, 4, 5].map((n) => `<button type="button" data-rate="${n}" class="${n <= d.rating ? "on" : ""}" aria-label="${n} étoile${n > 1 ? "s" : ""} sur 5" aria-pressed="${d.rating === n}">★</button>`).join("");
     $("#eFav").classList.toggle("on", d.fav);
+    $("#eFav").setAttribute("aria-pressed", d.fav);
   };
   refresh();
 
@@ -747,14 +765,14 @@ function renderEditor(id) {
     generated = true;
     const nameInput = $("#eName");
     if (!nameInput.value.trim() || nameInput.dataset.generated === "1") {
-      nameInput.value = genCats.map((c) => catLabels()[c]).join(" / ") + " – généré";
+      nameInput.value = genCats.map((c) => catLabels()[c]).join(" + ") + " (généré)";
       nameInput.dataset.generated = "1";
     }
     refresh();
   };
   const renderGenCats = () => {
     $("#genCats").innerHTML = Object.entries(catLabels()).map(([k, v]) =>
-      `<span class="chip ${genDraft.includes(k) ? "on" : ""}" data-gcat="${k}">${esc(v)}</span>`).join("");
+      `<button type="button" class="chip ${genDraft.includes(k) ? "on" : ""}" data-gcat="${k}" aria-pressed="${genDraft.includes(k)}">${esc(v)}</button>`).join("");
     $("#genGo").disabled = !genDraft.length;
   };
   $("#genBtn").addEventListener("click", () => { genDraft = [...genCats]; renderGenCats(); $("#genDialog").showModal(); });
@@ -777,13 +795,13 @@ function renderEditor(id) {
 
   $("#slots").addEventListener("click", (e) => {
     const lk = e.target.closest("[data-lock]");
-    if (lk) { const i = +lk.dataset.lock; locks[i] = !locks[i]; refresh(); return; }
+    if (lk) { const i = +lk.dataset.lock; locks[i] = !locks[i]; refresh(); $(`[data-lock="${i}"]`)?.focus(); return; }
     const clr = e.target.closest("[data-clear]");
-    if (clr) { const i = +clr.dataset.clear; d.perks[i] = null; locks[i] = false; refresh(); return; }
+    if (clr) { const i = +clr.dataset.clear; d.perks[i] = null; locks[i] = false; refresh(); $(`[data-slot="${i}"]`)?.focus(); return; }
     const slot = e.target.closest("[data-slot]");
     if (!slot) return;
     const i = +slot.dataset.slot;
-    openPicker({ role: d.role, taken: d.perks.filter((_, j) => j !== i), onPick: (k) => { d.perks[i] = k; refresh(); }, onRename: refresh });
+    openPicker({ role: d.role, taken: d.perks.filter((_, j) => j !== i), onPick: (k) => { d.perks[i] = k; refresh(); $(`[data-slot="${i}"]`)?.focus(); }, onRename: refresh });
   });
   $("#recos").addEventListener("click", (e) => {
     const k = e.target.closest("[data-reco]")?.dataset.reco;
@@ -816,6 +834,12 @@ function renderEditor(id) {
     d.notes = $("#eNotes").value.trim();
     if (d.role === "survivor") { d.killer = ""; d.power = ""; } else { d.item = "Aucun"; }
   };
+
+  const initialSnapshot = (collect(), JSON.stringify(d));
+  $("#eCancel").addEventListener("click", (e) => {
+    collect();
+    if (JSON.stringify(d) !== initialSnapshot && !confirm("Abandonner les modifications de ce build ?")) e.preventDefault();
+  });
 
   $("#saveBtn").addEventListener("click", () => {
     collect();
@@ -851,7 +875,7 @@ function renderTeams() {
   const list = [...state.teams].sort((a, b) => b.updated - a.updated);
   $("#app").innerHTML = `
     <div class="toolbar"><h1>Équipes</h1><button class="btn" id="newTeam">+ Nouvelle équipe</button></div>
-    <p class="muted">Prépare les builds de 4 survivants côte à côte : le site repère les doublons et les rôles que personne ne couvre.</p>
+    <p class="muted">Prépare les builds de 4 survivants côte à côte : le site repère les doublons et les catégories que personne ne couvre.</p>
     ${list.length ? `<div class="cards">${list.map((t) => `
       <article class="card" data-id="${t.id}">
         <div class="card-head"><div class="card-title">${esc(t.name)}</div></div>
@@ -891,15 +915,15 @@ function renderTeam(id) {
     <div class="toolbar">
       <input id="tName" value="${esc(t.name)}" style="max-width:420px;font:800 1.4rem Cinzel,serif" aria-label="Nom de l'équipe">
       <div class="row">
-        <button class="btn" id="tCopy" title="Garder cette version et travailler sur une copie">Enregistrer une copie</button>
+        <button class="btn" id="tCopy" title="Créer une copie de cette équipe">Dupliquer l'équipe</button>
         <a class="btn ghost" href="#/teams">← Équipes</a>
       </div>
     </div>
     <div class="team-grid" id="cols">${t.players.map((p, i) => `
       <div class="panel team-col" data-col="${i}">
         <input class="pseudo" value="${esc(p.pseudo)}" aria-label="Pseudo du joueur ${i + 1}" style="font-weight:600">
-        <select class="load" style="margin-top:.5rem">
-          <option value="">Charger un build…</option>
+        <select class="load" style="margin-top:.5rem" aria-label="Copier un build dans la colonne du joueur ${i + 1}">
+          <option value="">Copier un build ici…</option>
           ${survBuilds.map((b) => `<option value="${b.id}">${esc(b.name)}</option>`).join("")}
         </select>
         <div class="perk-slots"></div>
@@ -935,7 +959,7 @@ function renderTeam(id) {
     const cats = Object.entries(SURVIVOR_CATEGORIES);
     const per = t.players.map((p) => p.perks.filter(Boolean).flatMap((k) => perk(k)?.cats || []));
     $("#coverage").innerHTML = `<table class="coverage">
-      <thead><tr><th>Rôle</th>${t.players.map((p) => `<th>${esc(p.pseudo)}</th>`).join("")}<th>Total</th></tr></thead>
+      <thead><tr><th>Catégorie</th>${t.players.map((p) => `<th>${esc(p.pseudo)}</th>`).join("")}<th>Total</th></tr></thead>
       <tbody>${cats.map(([c, label]) => {
         const row = per.map((list) => list.filter((x) => x === c).length);
         const total = row.reduce((a, b) => a + b, 0);
@@ -950,13 +974,13 @@ function renderTeam(id) {
             .slice(0, 4).map((p) => esc(perkName(p.key)));
           return `<p><strong>${esc(label)}</strong> : personne ne le couvre.<br><span class="muted">Idées : ${ideas.join(", ")}</span></p>`;
         }).join("")
-      : `<p class="muted">Tous les rôles sont couverts par au moins un joueur.</p>`;
+      : `<p class="muted">Toutes les catégories sont couvertes par au moins un joueur.</p>`;
   };
   refresh();
 
   $("#tName").addEventListener("input", (e) => { t.name = e.target.value.trim() || "Équipe"; persist(); });
   $("#tCopy").addEventListener("click", () => {
-    const name = prompt("Nom de la copie :", `${t.name} (copie)`);
+    const name = prompt("Nom de la copie de l'équipe :", `${t.name} (copie)`);
     if (name === null) return;
     const c = Object.assign(clone(t), { id: uid(), name: name.trim() || `${t.name} (copie)`, updated: Date.now() });
     state.teams.push(c);
@@ -975,7 +999,7 @@ function renderTeam(id) {
     if (!e.target.classList.contains("load") || !e.target.value) return;
     const b = state.builds.find((x) => x.id === e.target.value);
     const p = t.players[+e.target.closest("[data-col]").dataset.col];
-    if (b) { p.perks = [...b.perks]; persist(); refresh(); toast(`« ${b.name} » chargé`); }
+    if (b) { p.perks = [...b.perks]; persist(); refresh(); toast(`Perks de « ${b.name} » copiés (pas de lien avec le build)`); }
     e.target.value = "";
   });
   $("#cols").addEventListener("click", (e) => {
@@ -989,7 +1013,7 @@ function renderTeam(id) {
       const b = Object.assign(newBuild(), { name: name.trim(), perks: [...p.perks], tags: ["équipe"] });
       state.builds.push(b);
       save();
-      toast("Build enregistré dans Mes builds");
+      toast(`Build « ${b.name} » enregistré dans Mes builds (tag « équipe »)`);
       return;
     }
     const clr = e.target.closest("[data-clear]");
@@ -1014,6 +1038,8 @@ function download(content, type, filename) {
 const today = () => new Date().toISOString().slice(0, 10);
 const slug = (s) => norm(s).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "build";
 
+$("#importBtn").addEventListener("click", () => $("#importInput").click());
+
 $("#exportBtn").addEventListener("click", () => {
   download(JSON.stringify(state, null, 2), "application/json", `dbd-builds-${today()}.json`);
   toast("Sauvegarde téléchargée");
@@ -1030,7 +1056,6 @@ function exportBuild(b) {
   toast("Build téléchargé");
 }
 
-// Renvoie un message d'erreur précis, ou null si le fichier est une sauvegarde valide.
 // Complète un build ou une équipe importé(e) : un fichier fait à la main ou ancien ne doit pas casser l'éditeur.
 function normalizeBuild(b) {
   const out = Object.assign(newBuild(), b);
@@ -1064,6 +1089,7 @@ function normalizeTeam(t) {
   return out;
 }
 
+// Renvoie un message d'erreur précis, ou null si le fichier est une sauvegarde valide.
 function validateImport(data) {
   const isObj = (x) => x && typeof x === "object" && !Array.isArray(x);
   if (!isObj(data)) return "le fichier n'est pas une sauvegarde DBD Builder";
@@ -1149,7 +1175,7 @@ $("#csvBtn").addEventListener("click", () => {
     ...[0, 1, 2, 3].map((i) => (b.perks[i] ? perkName(b.perks[i]) : "")),
     (b.addons || [])[0], (b.addons || [])[1], b.offering,
     (b.playstyles || []).join(", "), (b.tags || []).join(", "),
-    b.rating || "", b.fav ? "oui" : "", b.notes, b.updated ? new Date(b.updated).toISOString().slice(0, 10) : "",
+    b.rating || "", b.fav ? "oui" : "", b.notes, b.updated ? new Date(b.updated).toLocaleDateString("sv-SE") : "",
   ]);
   const csv = [head, ...rows].map((r) => r.map(cell).join(";")).join("\r\n");
   download("\ufeff" + csv, "text/csv;charset=utf-8", `dbd-builds-${today()}.csv`);
@@ -1162,9 +1188,21 @@ $("#appVersion").textContent = "v" + APP_VERSION;
 
 /* ========= Routeur ========= */
 
+// Une équipe créée puis quittée sans rien y mettre est supprimée, pour ne pas en accumuler.
+let lastTeamId = null;
+function dropPristineTeam(id) {
+  const t = state.teams.find((x) => x.id === id);
+  if (!t || t.name !== "Nouvelle équipe" || t.notes) return;
+  if (t.players.some((p, i) => p.perks.some(Boolean) || p.pseudo !== `Joueur ${i + 1}`)) return;
+  state.teams = state.teams.filter((x) => x.id !== id);
+  save();
+}
+
 function route() {
   const [, view = "builds", id] = (location.hash || "#/builds").split("/");
-  const nav = { builds: "builds", new: "new", edit: "new", teams: "teams", team: "teams" }[view] || "builds";
+  if (lastTeamId && !(view === "team" && id === lastTeamId)) dropPristineTeam(lastTeamId);
+  lastTeamId = view === "team" ? id : null;
+  const nav = { builds: "builds", new: "new", teams: "teams", team: "teams" }[view] || "builds";
   document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("active", a.dataset.nav === nav));
   if (view === "new") renderEditor(null);
   else if (view === "edit") renderEditor(id);
