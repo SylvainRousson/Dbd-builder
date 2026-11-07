@@ -65,7 +65,7 @@ function esc(s) {
 }
 
 function norm(s) {
-  return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[’‘]/g, "'").toLowerCase();
 }
 
 function toast(msg) {
@@ -211,7 +211,7 @@ function pickerItems() {
   return [...PERKS.values()]
     .filter((p) => p.role === picker.role)
     .filter((p) => !picker.cat || p.cats.includes(picker.cat))
-    .filter((p) => !q || norm(perkName(p.key)).includes(q) || norm(p.en).includes(q))
+    .filter((p) => !q || norm(perkName(p.key)).includes(q) || norm(p.fr).includes(q) || norm(p.en).includes(q))
     .sort((a, b) => perkName(a.key).localeCompare(perkName(b.key), "fr"));
 }
 
@@ -228,6 +228,10 @@ function renderPickerList() {
         <button class="edit" type="button" data-rename="${esc(p.key)}" title="Corriger le nom français">✎</button>
       </li>`).join("")
     : `<li class="muted">Aucun perk trouvé. Tu peux l'ajouter ci-dessous.</li>`;
+  if (!items.length) {
+    $(".custom-perk").open = true;
+    if (!$("#customName").value) $("#customName").value = $("#pickerSearch").value.trim();
+  }
   renderRenamesBar();
 }
 
@@ -287,14 +291,28 @@ $("#pickerList").addEventListener("click", (e) => {
 $("#customAdd").addEventListener("click", () => {
   const name = $("#customName").value.trim();
   if (!name) return;
-  const key = "custom:" + name;
-  if (!PERKS.has(key)) {
+  const official = [...PERKS.values()].find((p) => !p.custom && p.role === picker.role && [perkName(p.key), p.fr, p.en].some((n) => norm(n) === norm(name)));
+  if (official) {
+    $("#pickerSearch").value = name;
+    $("#customName").value = "";
+    renderPickerList();
+    toast(`« ${perkName(official.key)} » existe déjà dans la liste`);
+    return;
+  }
+  // Un perk perso est propre à un rôle : le même nom peut exister côté survivant et côté tueur.
+  const same = state.customPerks.find((c) => c.role === picker.role && norm(c.name) === norm(name));
+  let key = same?.key;
+  if (!key) {
+    key = `custom:${picker.role}:${name}`;
     state.customPerks.push({ key, name, role: picker.role });
     save();
     PERKS = buildPerkIndex();
   }
   $("#customName").value = "";
   choosePerk(key);
+});
+$("#customName").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); $("#customAdd").click(); }
 });
 
 function choosePerk(key) {
@@ -435,13 +453,25 @@ function miniPerks(perks) {
 function stars(n) { return n ? `<span class="stars" title="${n}/5">${"★".repeat(n)}${"☆".repeat(5 - n)}</span>` : ""; }
 
 function allTags() {
-  return [...new Set(state.builds.flatMap((b) => b.tags || []))].sort((a, b) => a.localeCompare(b, "fr"));
+  const seen = new Map();
+  state.builds.flatMap((b) => b.tags || []).forEach((t) => { if (!seen.has(norm(t))) seen.set(norm(t), t); });
+  return [...seen.values()].sort((a, b) => a.localeCompare(b, "fr"));
 }
 
 /* ========= Vue : mes builds ========= */
 
 function renderBuilds() {
-  const killers = [...new Set(state.builds.filter((b) => b.role === "killer" && b.killer).map((b) => b.killer))].sort();
+  // Tueurs déjà joués, sans doublon de casse ni d'accents (« Spirit » = « spirit »).
+  const killerMap = new Map();
+  state.builds.filter((b) => b.role === "killer" && b.killer).forEach((b) => { if (!killerMap.has(norm(b.killer))) killerMap.set(norm(b.killer), b.killer); });
+  const killers = [...killerMap.values()].sort((a, b) => a.localeCompare(b, "fr"));
+  const tags = allTags();
+  // Un filtre enregistré qui ne correspond plus à rien (build supprimé, renommé, rôle Survivant) est remis à zéro.
+  const tagKnown = (t) => tags.some((x) => norm(x) === norm(t));
+  const stale = (ui.role === "survivor" && ui.killer) || (ui.killer && !killerMap.has(norm(ui.killer))) || (ui.tag && !tagKnown(ui.tag));
+  if (ui.role === "survivor" || (ui.killer && !killerMap.has(norm(ui.killer)))) ui.killer = "";
+  if (ui.tag && !tagKnown(ui.tag)) ui.tag = "";
+  if (stale) saveUi();
   const app = $("#app");
   app.innerHTML = `
     <div class="toolbar">
@@ -455,24 +485,33 @@ function renderBuilds() {
         <option value="survivor" ${ui.role === "survivor" ? "selected" : ""}>Survivant</option>
         <option value="killer" ${ui.role === "killer" ? "selected" : ""}>Tueur</option>
       </select>
-      <select id="fKiller"><option value="">Tous les tueurs</option>${killers.map((k) => `<option ${ui.killer === k ? "selected" : ""}>${esc(k)}</option>`).join("")}</select>
-      <select id="fTag"><option value="">Tous les tags</option>${allTags().map((t) => `<option ${ui.tag === t ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>
+      ${ui.role === "survivor" ? "" : `<select id="fKiller"><option value="">Tous les tueurs</option>${killers.map((k) => `<option ${norm(ui.killer) === norm(k) ? "selected" : ""}>${esc(k)}</option>`).join("")}</select>`}
+      <select id="fTag"><option value="">Tous les tags</option>${tags.map((t) => `<option ${norm(ui.tag) === norm(t) ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>
       <select id="fSort">
         <option value="updated" ${ui.sort === "updated" ? "selected" : ""}>Modifiés récemment</option>
+        <option value="fav" ${ui.sort === "fav" ? "selected" : ""}>Favoris d'abord</option>
         <option value="rating" ${ui.sort === "rating" ? "selected" : ""}>Mieux notés</option>
         <option value="name" ${ui.sort === "name" ? "selected" : ""}>Nom (A→Z)</option>
       </select>
     </div>
     <span class="chip ${ui.favOnly ? "on" : ""}" id="fFav">★ Favoris seulement</span>
+    <span class="count" id="count"></span>
     <div id="cards"></div>`;
 
   const bind = (id, prop, ev = "change") => $(id).addEventListener(ev, (e) => { ui[prop] = e.target.value; saveUi(); renderCards(); });
   bind("#fQ", "q", "input");
-  bind("#fRole", "role");
-  bind("#fKiller", "killer");
+  // Le filtre « tueur » n'existe que pour les rôles Tous / Tueur : on redessine la barre quand le rôle change.
+  $("#fRole").addEventListener("change", (e) => { ui.role = e.target.value; if (ui.role === "survivor") ui.killer = ""; saveUi(); renderBuilds(); });
+  if ($("#fKiller")) bind("#fKiller", "killer");
   bind("#fTag", "tag");
   bind("#fSort", "sort");
   $("#fFav").addEventListener("click", (e) => { ui.favOnly = !ui.favOnly; e.target.classList.toggle("on", ui.favOnly); saveUi(); renderCards(); });
+  $("#count").addEventListener("click", (e) => {
+    if (e.target.id !== "resetFilters") return;
+    Object.assign(ui, { q: "", role: "all", killer: "", tag: "", favOnly: false });
+    saveUi();
+    renderBuilds();
+  });
   renderCards();
 }
 
@@ -480,20 +519,25 @@ function renderCards() {
   const q = norm(ui.q);
   let list = state.builds.filter((b) =>
     (ui.role === "all" || b.role === ui.role) &&
-    (!ui.killer || b.killer === ui.killer) &&
-    (!ui.tag || (b.tags || []).includes(ui.tag)) &&
+    (!ui.killer || norm(b.killer) === norm(ui.killer)) &&
+    (!ui.tag || (b.tags || []).some((t) => norm(t) === norm(ui.tag))) &&
     (!ui.favOnly || b.fav) &&
-    (!q || norm([b.name, b.killer, b.notes, b.item, b.power, b.offering, ...(b.addons || []), ...(b.tags || []), ...(b.playstyles || []),
-      ...b.perks.map(perkName), ...b.perks].join(" ")).includes(q)));
+    (!q || norm([b.name, b.killer, b.notes, b.item !== "Aucun" ? b.item : "", b.power, b.offering, ...(b.addons || []), ...(b.tags || []), ...(b.playstyles || []),
+      ...b.perks.map(perkName), ...b.perks.map((k) => perk(k)?.en)].join(" ")).includes(q)));
 
   const sorters = {
     updated: (a, b) => (b.updated || 0) - (a.updated || 0),
     rating: (a, b) => (b.rating || 0) - (a.rating || 0) || (b.updated || 0) - (a.updated || 0),
+    fav: (a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || (b.updated || 0) - (a.updated || 0),
     name: (a, b) => a.name.localeCompare(b.name, "fr"),
   };
-  list.sort((a, b) => (b.fav - a.fav) || sorters[ui.sort](a, b));
+  list.sort(sorters[ui.sort] || sorters.updated);
 
   const el = $("#cards");
+  const filtering = ui.q || ui.role !== "all" || ui.killer || ui.tag || ui.favOnly;
+  $("#count").innerHTML = state.builds.length
+    ? `${list.length} build${list.length > 1 ? "s" : ""} sur ${state.builds.length}${filtering ? ` · <button type="button" class="linklike" id="resetFilters">Réinitialiser les filtres</button>` : ""}`
+    : "";
   if (!state.builds.length) {
     el.innerHTML = `<div class="empty"><h2>Aucun build pour l'instant</h2><p>Crée ton premier build pour t'en souvenir.</p><a class="btn" href="#/new">Créer un build</a></div>`;
     return;
@@ -553,6 +597,9 @@ function buildText(b) {
   const addons = (b.addons || []).filter(Boolean);
   if (addons.length) lines.push("Add-ons : " + addons.join(", "));
   if (b.offering) lines.push("Offrande : " + b.offering);
+  if ((b.playstyles || []).length) lines.push("Style : " + b.playstyles.join(", "));
+  if ((b.tags || []).length) lines.push("Tags : " + b.tags.map((t) => "#" + t).join(" "));
+  if (b.rating) lines.push("Note : " + b.rating + "/5");
   if (b.notes) lines.push("Notes : " + b.notes);
   return lines.join("\n");
 }
@@ -607,7 +654,7 @@ function renderEditor(id) {
           <h2 style="margin-top:0">Équipement</h2>
           <div class="grid-3">
             <label class="field" id="itemField"><span>Objet</span>
-              <select id="eItem">${SURVIVOR_ITEMS.map((i) => `<option ${d.item === i ? "selected" : ""}>${esc(i)}</option>`).join("")}</select>
+              <select id="eItem">${(d.item && !SURVIVOR_ITEMS.includes(d.item) ? [...SURVIVOR_ITEMS, d.item] : SURVIVOR_ITEMS).map((i) => `<option ${d.item === i ? "selected" : ""}>${esc(i)}</option>`).join("")}</select>
             </label>
             <label class="field" id="powerField"><span>Pouvoir</span><input id="ePower" value="${esc(d.power)}" placeholder="ex. Piège à ours"></label>
             <label class="field"><span>Add-on 1</span><input id="eAdd0" value="${esc(d.addons[0])}"></label>
@@ -654,6 +701,8 @@ function renderEditor(id) {
 
   const locks = [false, false, false, false];
   let genCats = (ui.genCats && ui.genCats[d.role]) || [];
+  let genDraft = [];
+  let generated = false;
 
   const refresh = () => {
     document.querySelectorAll("#role button").forEach((b) => b.classList.toggle("on", b.dataset.role === d.role));
@@ -661,7 +710,7 @@ function renderEditor(id) {
     $("#itemField").hidden = d.role !== "survivor";
     $("#powerField").hidden = d.role !== "killer";
     $("#slots").innerHTML = slotsHtml(d.perks, new Set(), locks);
-    $("#rerollBtn").hidden = !genCats.length;
+    $("#rerollBtn").hidden = !generated || !genCats.length;
     $("#warns").innerHTML = warnings(d.perks).map((w) => `<div class="warn">${esc(w)}</div>`).join("");
     const recos = recommend(d.perks, d.role, d.id);
     $("#recos").innerHTML = !d.perks.some(Boolean)
@@ -685,6 +734,7 @@ function renderEditor(id) {
     d.perks = [null, null, null, null];
     locks.fill(false);
     genCats = (ui.genCats && ui.genCats[d.role]) || [];
+    generated = false;
     refresh();
   });
 
@@ -692,6 +742,7 @@ function renderEditor(id) {
   const runGenerate = () => {
     if (!genCats.length) return;
     d.perks = generatePerks(d.role, genCats, d.perks, locks);
+    generated = true;
     const nameInput = $("#eName");
     if (!nameInput.value.trim() || nameInput.dataset.generated === "1") {
       nameInput.value = genCats.map((c) => catLabels()[c]).join(" / ") + " – généré";
@@ -701,18 +752,19 @@ function renderEditor(id) {
   };
   const renderGenCats = () => {
     $("#genCats").innerHTML = Object.entries(catLabels()).map(([k, v]) =>
-      `<span class="chip ${genCats.includes(k) ? "on" : ""}" data-gcat="${k}">${esc(v)}</span>`).join("");
-    $("#genGo").disabled = !genCats.length;
+      `<span class="chip ${genDraft.includes(k) ? "on" : ""}" data-gcat="${k}">${esc(v)}</span>`).join("");
+    $("#genGo").disabled = !genDraft.length;
   };
-  $("#genBtn").addEventListener("click", () => { renderGenCats(); $("#genDialog").showModal(); });
+  $("#genBtn").addEventListener("click", () => { genDraft = [...genCats]; renderGenCats(); $("#genDialog").showModal(); });
   $("#genCancel").addEventListener("click", () => $("#genDialog").close());
   $("#genCats").addEventListener("click", (e) => {
     const c = e.target.closest("[data-gcat]")?.dataset.gcat;
     if (!c) return;
-    genCats = genCats.includes(c) ? genCats.filter((x) => x !== c) : [...genCats, c];
+    genDraft = genDraft.includes(c) ? genDraft.filter((x) => x !== c) : [...genDraft, c];
     renderGenCats();
   });
   $("#genGo").addEventListener("click", () => {
+    genCats = genDraft;
     ui.genCats = Object.assign({}, ui.genCats, { [d.role]: genCats });
     saveUi();
     $("#genDialog").close();
@@ -977,6 +1029,39 @@ function exportBuild(b) {
 }
 
 // Renvoie un message d'erreur précis, ou null si le fichier est une sauvegarde valide.
+// Complète un build ou une équipe importé(e) : un fichier fait à la main ou ancien ne doit pas casser l'éditeur.
+function normalizeBuild(b) {
+  const out = Object.assign(newBuild(), b);
+  const str = (v, d = "") => (typeof v === "string" ? v : d);
+  out.name = str(b.name);
+  out.killer = str(b.killer);
+  out.item = str(b.item, "Aucun") || "Aucun";
+  out.power = str(b.power);
+  out.offering = str(b.offering);
+  out.notes = str(b.notes);
+  out.perks = [0, 1, 2, 3].map((i) => (typeof b.perks[i] === "string" ? b.perks[i] : null));
+  out.addons = [0, 1].map((i) => str((b.addons || [])[i]));
+  out.tags = Array.isArray(b.tags) ? b.tags.filter((t) => typeof t === "string") : [];
+  out.playstyles = Array.isArray(b.playstyles) ? b.playstyles.filter((t) => typeof t === "string") : [];
+  out.rating = Number.isInteger(b.rating) ? Math.min(5, Math.max(0, b.rating)) : 0;
+  out.fav = b.fav === true;
+  out.created = Number.isFinite(b.created) ? b.created : Date.now();
+  out.updated = Number.isFinite(b.updated) ? b.updated : Date.now();
+  return out;
+}
+
+function normalizeTeam(t) {
+  const out = Object.assign(newTeam(), t);
+  out.name = typeof t.name === "string" && t.name ? t.name : "Équipe importée";
+  out.notes = typeof t.notes === "string" ? t.notes : "";
+  out.updated = Number.isFinite(t.updated) ? t.updated : Date.now();
+  out.players = t.players.map((p, i) => Object.assign({}, p, {
+    pseudo: typeof p.pseudo === "string" && p.pseudo ? p.pseudo : `Joueur ${i + 1}`,
+    perks: [0, 1, 2, 3].map((j) => (typeof p.perks[j] === "string" ? p.perks[j] : null)),
+  }));
+  return out;
+}
+
 function validateImport(data) {
   const isObj = (x) => x && typeof x === "object" && !Array.isArray(x);
   if (!isObj(data)) return "le fichier n'est pas une sauvegarde DBD Builder";
@@ -1021,6 +1106,18 @@ $("#importInput").addEventListener("change", async (e) => {
   };
   const nb = count(state.builds, data.builds);
   const nt = count(state.teams, data.teams);
+  // Les éléments de même identifiant sont remplacés par ceux du fichier : on le dit avant, avec le décompte.
+  const overwritten = nb.updated + nt.updated;
+  if (overwritten) {
+    const localById = new Map([...state.builds, ...state.teams].map((x) => [x.id, x]));
+    const newerHere = [...(data.builds || []), ...(data.teams || [])].filter((x) => localById.has(x.id) && (localById.get(x.id).updated || 0) > (x.updated || 0)).length;
+    const msg = `${overwritten} élément(s) existant(s) seront remplacés par la version du fichier (${nb.updated} build(s), ${nt.updated} équipe(s)).`
+      + (newerHere ? `\n\nAttention : ${newerHere} d'entre eux ont été modifiés plus récemment sur cet appareil que dans le fichier.` : "")
+      + "\n\nContinuer l'import ?";
+    if (!confirm(msg)) { toast("Import annulé, rien n'a été modifié"); return; }
+  }
+  data.builds = (data.builds || []).map(normalizeBuild);
+  data.teams = (data.teams || []).map(normalizeTeam);
   state.builds = merge(state.builds, data.builds);
   state.teams = merge(state.teams, data.teams);
   state.customPerks = merge(state.customPerks, data.customPerks, "key");
@@ -1029,7 +1126,8 @@ $("#importInput").addEventListener("change", async (e) => {
   save();
   PERKS = buildPerkIndex();
   const part = (n, label) => (n.added || n.updated) ? `${label} : ${n.added} ajouté(s), ${n.updated} mis à jour` : "";
-  toast("Import terminé — " + [part(nb, "builds"), part(nt, "équipes")].filter(Boolean).join(" · "));
+  const parts = [part(nb, "builds"), part(nt, "équipes")].filter(Boolean);
+  toast(parts.length ? "Import terminé — " + parts.join(" · ") : "Import terminé : le fichier ne contient ni build ni équipe");
   route();
 });
 
