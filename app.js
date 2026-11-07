@@ -1,5 +1,7 @@
 "use strict";
 
+const APP_VERSION = "0.1.0";
+
 /* ========= Stockage ========= */
 
 const STORE_KEY = "dbdbuilder.v1";
@@ -1153,6 +1155,10 @@ $("#csvBtn").addEventListener("click", () => {
   download("\ufeff" + csv, "text/csv;charset=utf-8", `dbd-builds-${today()}.csv`);
   toast("CSV téléchargé");
 });
+
+/* ========= Version ========= */
+
+$("#appVersion").textContent = "v" + APP_VERSION;
 
 /* ========= Routeur ========= */
 
