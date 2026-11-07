@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DBD Builder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Roboto+Condensed:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="fog" aria-hidden="true"><span></span><span></span></div>
+
+  <header class="topbar">
+    <a class="brand" href="#/builds">DBD <em>Builder</em></a>
+    <nav>
+      <a href="#/builds" data-nav="builds">Mes builds</a>
+      <a href="#/new" data-nav="new">Créer</a>
+      <a href="#/teams" data-nav="teams">Équipes</a>
+    </nav>
+    <div class="menu">
+      <button class="btn ghost" id="exportBtn" title="Télécharger une sauvegarde JSON">Exporter</button>
+      <button class="btn ghost" id="csvBtn" title="Tableau pour Google Sheets / Excel">CSV</button>
+      <label class="btn ghost" title="Charger une sauvegarde JSON">Importer<input type="file" id="importInput" accept="application/json" hidden></label>
+    </div>
+  </header>
+
+  <main id="app"></main>
+
+  <dialog id="picker">
+    <form method="dialog" class="picker-head">
+      <input type="search" id="pickerSearch" placeholder="Chercher un perk (français ou anglais)…" autocomplete="off">
+      <button class="btn ghost" value="cancel">Fermer</button>
+    </form>
+    <div class="chips" id="pickerCats"></div>
+    <ul id="pickerList" class="picker-list"></ul>
+    <details class="custom-perk">
+      <summary>Ajouter un perk qui manque</summary>
+      <div class="row">
+        <input id="customName" placeholder="Nom du perk">
+        <button class="btn" id="customAdd" type="button">Ajouter</button>
+      </div>
+    </details>
+    <div class="renames-bar" id="renamesBar" hidden>
+      <span id="renamesInfo"></span>
+      <button class="btn small ghost" id="renamesReset" type="button">Revenir aux noms officiels</button>
+    </div>
+  </dialog>
+
+  <footer class="credits">Projet de fan non officiel. Dead by Daylight et ses visuels appartiennent à Behaviour Interactive. Textes : site officiel et wiki Dead by Daylight (CC BY-SA).</footer>
+
+  <div id="toast" role="status"></div>
+  <div id="perkTip" role="tooltip" hidden></div>
+
+  <script src="data.js"></script>
+  <script src="icons.js"></script>
+  <script src="perk-images.js"></script>
+  <script src="descriptions.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
