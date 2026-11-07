@@ -2,7 +2,7 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions numérotées `MAJEUR.MINEUR.CORRECTIF`.
 
-## [Non publié]
+## [0.2.0] - 2026-11-07
 
 ### Accessibilité
 - Puces, étoiles, « Favori », « garder » et « retirer » sont de vrais boutons (clavier, `aria-pressed`), non imbriqués ; « Importer » est atteignable au clavier.
